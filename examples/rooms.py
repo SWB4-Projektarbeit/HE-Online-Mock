@@ -15,4 +15,18 @@ room1 = Room(
     "CONFIRMED",
 )
 
+room2 = Room(
+    23422,
+    "LEH",
+    59540,
+    144708,
+    "2026-01-14t08:45:00",
+    "2026-01-14t11:15:00",
+    "REGULAR",
+    85,
+    6977,
+    "CONFIRMED",
+)
+
 rooms.append(room1)
+rooms.append(room2)
