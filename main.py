@@ -27,6 +27,7 @@ def getAppointments():
                 "roomUid": room.roomUid,
                 "startAt": room.startAt,
                 "statusTypeKey": room.statusTypeKey,
+                "successorUid": 1
             }
             for room in rooms
         ]
@@ -74,4 +75,3 @@ def getCourse(uid):
     return resp
 
 api.run(host="127.0.0.1", port=LOCAL_PORT)
-
