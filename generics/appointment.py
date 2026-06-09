@@ -1,4 +1,4 @@
-class Room:
+class Appointment:
     def __init__(
         self,
         uid: int,
@@ -11,6 +11,7 @@ class Room:
         resource_uid: int,
         room_uid: int,
         status_type_key: str,
+        successor_uid: int | None = None,
     ):
         self.uid = uid
         self.applicationTypeKey = application_type_key
@@ -24,3 +25,4 @@ class Room:
         self.roomUid = room_uid
         self.resourceUrl = f"https://qm.heonline.hs-esslingen.de/he/ee/rest/pages/slc.cp.apt/resource/{self.roomUid}"
         self.statusTypeKey = status_type_key
+        self.successorUid = successor_uid

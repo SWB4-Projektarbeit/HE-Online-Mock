@@ -3,7 +3,7 @@ from time import sleep
 from flask import Flask, json, Response
 
 from examples.courses import courses
-from examples.rooms import rooms
+from examples.appointments import rooms
 
 LOCAL_PORT = 8081
 
@@ -27,7 +27,7 @@ def getAppointments():
                 "roomUid": room.roomUid,
                 "startAt": room.startAt,
                 "statusTypeKey": room.statusTypeKey,
-                "successorUid": 1
+                "successorUid": room.successorUid,
             }
             for room in rooms
         ]
