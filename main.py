@@ -1,16 +1,35 @@
 import os
+from functools import wraps
 
-from flask import Flask, json, Response, redirect, url_for, session, render_template_string
+from authlib.integrations.flask_oauth2 import current_token
+from functools import wraps
+import jwt
+import requests
+from flask import Flask, json, Response, redirect, url_for, session, request, jsonify
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
 from examples.courses import courses
 from examples.appointments import rooms
+from flask_oidc import OpenIDConnect
 
 LOCAL_PORT = 8081
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY")
+app.config.update({
+    'SECRET_KEY': os.getenv("FLASK_SECRET_KEY"),
+    'TESTING': True,
+    'DEBUG': True,
+    'OIDC_CLIENT_SECRETS': 'client_secrets.json',
+    'OIDC_ID_TOKEN_COOKIE_SECURE': False,
+    'OIDC_USER_INFO_ENABLED': True,
+    'OIDC_OPENID_REALM': 'flask-demo',
+    'OIDC_SCOPES': ['openid', 'profile'],
+    'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post',
+    'OIDC_TOKEN_TYPE_HINT': 'access_token'
+})
+
+oidc = OpenIDConnect(app)
 
 oauth = OAuth(app)
 keycloak = oauth.register(
@@ -25,11 +44,51 @@ keycloak = oauth.register(
 )
 
 
+def get_public_key():
+    response = requests.get(os.getenv("PUBLICKEY_URL"))
+    response.raise_for_status()
+    jwks = response.json()
+    public_key = jwt.algorithms.RSAAlgorithm.from_jwk(jwks['keys'][1])
+    return public_key
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+
+        # Get the token from the Authorization header
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+            print(token)
+
+        if not token:
+            return jsonify({"message": "Token is missing!"}), 401
+
+        try:
+            # Decode and validate the token
+            public_key = get_public_key()
+            print(public_key)
+            data = jwt.decode(token, public_key, algorithms=["RS256"], audience=os.getenv("KEYCLOAK_CLIENT_ID"))
+            # Optionally, you can add more checks here (e.g., roles, expiration, etc.)
+        except jwt.ExpiredSignatureError:
+            print("HELLO")
+            return jsonify({"message": "Token has expired!"}), 401
+        except jwt.InvalidTokenError:
+            print("HELLO2")
+            return jsonify({"message": "Invalid token!"}), 401
+
+        # Attach the decoded token data to the request object
+        request.user_data = data
+        return f(*args, **kwargs)
+
+    return decorated
+
+
 @app.route("/he/co/co-tm-core/course/api/appointments", methods=["GET"])
+@token_required
 def getAppointments():
-    user = session.get("user")
-    if not user:
-        return redirect(url_for("login", redirect_method="getAppointments", _external=True))
+    print(request.headers)
+    print(current_token)
     ret = json.dumps(
         [
             {
@@ -59,9 +118,7 @@ def getAppointments():
 
 @app.route("/he/co/co-tm-core/course/api/courses/<int:uid>", methods=["GET"])
 def getCourse(uid):
-    user = session.get("user")
-    if not user:
-        return redirect(url_for("login", redirect_method="getCourse", uid=uid, _external=True))
+    print(request.headers)
     for course in courses:
         if course.uid == uid:
             ret = json.dumps(
@@ -94,25 +151,5 @@ def getCourse(uid):
                     status=200,
                     mimetype="application/json")
     return resp
-
-@app.route("/login/<redirect_method>/<uid>")
-def login(redirect_method = None, uid = None):
-    redirect_uri = url_for("auth", redirect_method=redirect_method, uid=uid, _external=True)
-    return keycloak.authorize_redirect(redirect_uri)
-
-@app.route("/auth/<redirect_method>/<uid>")
-def auth(redirect_method = None, uid = None):
-    token = keycloak.authorize_access_token()
-    session["user"] = token.get("userinfo")
-    if redirect:
-        if uid:
-            return redirect(url_for(redirect_method, uid=uid))
-        return redirect(url_for(redirect_method))
-    return redirect("/")
-
-@app.route("/logout")
-def logout():
-    session.pop("user", None)
-    return redirect("/")
 
 app.run(host="127.0.0.1", port=LOCAL_PORT)
