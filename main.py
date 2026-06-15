@@ -1,4 +1,5 @@
 import os
+
 from flask import Flask, json, Response, redirect, url_for, session, render_template_string
 from authlib.integrations.flask_client import OAuth
 from dotenv import load_dotenv
@@ -11,14 +12,16 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY")
 
-
 oauth = OAuth(app)
-oauth.register(
+keycloak = oauth.register(
     name="keycloak",
     client_id=os.getenv("KEYCLOAK_CLIENT_ID"),
     client_secret=os.getenv("KEYCLOAK_CLIENT_SECRET"),
-    server_metadata_url=os.getenv("KEYCLOAK_SERVER_METADATA_URL"),
-    client_kwargs={"scope": "openid profile email"},
+    server_metadata_url=f'{os.getenv("KEYCLOAK_URL")}/realms/{os.getenv("KEYCLOAK_REALM")}/.well-known/openid-configuration',
+    client_kwargs={
+        "scope": "openid profile email",
+        "code_challenge_method": "S256",
+    },
 )
 
 
@@ -26,9 +29,7 @@ oauth.register(
 def getAppointments():
     user = session.get("user")
     if not user:
-        return Response(response="Not authenticated",
-                        status=401,
-                        mimetype="application/json")
+        return redirect(url_for("login", redirect_method="getAppointments", _external=True))
     ret = json.dumps(
         [
             {
@@ -60,9 +61,7 @@ def getAppointments():
 def getCourse(uid):
     user = session.get("user")
     if not user:
-        return Response(response="Not authenticated",
-                        status=401,
-                        mimetype="application/json")
+        return redirect(url_for("login", redirect_method="getCourse", uid=uid, _external=True))
     for course in courses:
         if course.uid == uid:
             ret = json.dumps(
@@ -96,41 +95,24 @@ def getCourse(uid):
                     mimetype="application/json")
     return resp
 
-@app.route("/")
-def index():
-    user = session.get("user")
-    if user:
-        return render_template_string('''
-            <h1>Welcome, {{ user['name'] }}!</h1>
-            <form action="{{ url_for('logout') }}" method="post">
-                <button type="submit">Logout</button>
-            </form>
-        ''', user=user)
-    else:
-        return render_template_string('''
-            <h1>Hello, you are not logged in.</h1>
-            <form action="{{ url_for('login') }}" method="post">
-                <button type="submit">Login</button>
-            </form>
-        ''')
+@app.route("/login/<redirect_method>/<uid>")
+def login(redirect_method = None, uid = None):
+    redirect_uri = url_for("auth", redirect_method=redirect_method, uid=uid, _external=True)
+    return keycloak.authorize_redirect(redirect_uri)
 
-@app.route("/login", methods=["POST"])
-def login():
-    redirect_uri = url_for("auth", _external=True)
-    return oauth.keycloak.authorize_redirect(redirect_uri)
-
-@app.route("/auth")
-def auth(redirect_uri = None):
-    token = oauth.keycloak.authorize_access_token()
-    session["user"] = oauth.keycloak.parse_id_token(token)
-    if redirect_uri:
-        return redirect(redirect_uri)
+@app.route("/auth/<redirect_method>/<uid>")
+def auth(redirect_method = None, uid = None):
+    token = keycloak.authorize_access_token()
+    session["user"] = token.get("userinfo")
+    if redirect:
+        if uid:
+            return redirect(url_for(redirect_method, uid=uid))
+        return redirect(url_for(redirect_method))
     return redirect("/")
 
-@app.route("/logout", methods=["POST"])
+@app.route("/logout")
 def logout():
     session.pop("user", None)
-    logout_url = f"{os.getenv('KEYCLOAK_LOGOUT_URL')}?redirect_uri={url_for('index', _external=True)}"
-    return redirect(logout_url)
+    return redirect("/")
 
 app.run(host="127.0.0.1", port=LOCAL_PORT)
