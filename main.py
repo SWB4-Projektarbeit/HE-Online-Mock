@@ -1,6 +1,4 @@
-from time import sleep
-
-from flask import Flask, json, Response
+from flask import Flask, json, Response, request
 
 from examples.courses import courses
 from examples.appointments import rooms
@@ -12,6 +10,7 @@ api = Flask(__name__)
 
 @api.route("/he/co/co-tm-core/course/api/appointments", methods=["GET"])
 def getAppointments():
+    print(request.headers)
     ret = json.dumps(
         [
             {
@@ -41,6 +40,7 @@ def getAppointments():
 
 @api.route("/he/co/co-tm-core/course/api/courses/<int:uid>", methods=["GET"])
 def getCourse(uid):
+    print(request.headers)
     for course in courses:
         if course.uid == uid:
             ret = json.dumps(
