@@ -1,6 +1,9 @@
 # HE Online Mock
 
-How to start the mock:
+## Setup
+create a venv and install flask in it.
+
+## Start
 ```
-python -m flask --app main run
+python3 main.py
 ```
